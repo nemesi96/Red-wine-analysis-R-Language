@@ -1,0 +1,434 @@
+---
+title: "Red Wine Analysis"
+author: "Vishnu Prasanth Reddy"
+date: "02 Sept. 2017"
+output: html_document
+---
+
+========================================================
+
+##Introduction:
+This tidy data set contains 1,599 red wines with 12 variables on the chemical properties of the wine. At least 3 wine experts rated the quality of each wine, providing a rating between 0 (very bad) and 10 (very excellent)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+
+#Loading The packages
+library(ggplot2)# for making plots
+library(dplyr) # to acess dplyr functions
+library(gridExtra) # for multiple plots
+library(GGally)#for matrices
+```
+
+##variables in Red wines data sheet
+
+```{r echo=FALSE, Load_the_Data}
+#loading the csv as "red_wine"
+red_wine=read.csv('wineQualityReds.csv')
+#first 5 the rows from the data frame
+names(red_wine)
+
+```
+
+##Data Wrangling :
+
+Removing the variable  'X' since it represents serial number
+
+```{r echo=FALSE }
+#eleminating the variable  'X' since itrepresents serial number
+red_wine=subset(red_wine,select = - X)
+names(red_wine)
+#uncomment to check the structure of the data given data
+#str(red_wine)
+```
+
+##Summary and Description of Data sheet :
+
+1 - fixed acidity: most acids involved with wine or fixed or nonvolatile (do not evaporate readily)
+
+   2 - volatile acidity: the amount of acetic acid in wine, which at too high of levels can lead to an unpleasant, vinegar taste
+
+   3 - citric acid: found in small quantities, citric acid can add 'freshness' and flavor to wines
+
+   4 - residual sugar: the amount of sugar remaining after fermentation stops, it's rare to find wines with less than 1 gram/liter and wines with greater than 45 grams/liter are considered sweet
+
+   5 - chlorides: the amount of salt in the wine
+
+   6 - free sulfur dioxide: the free form of SO2 exists in equilibrium between molecular SO2 (as a dissolved gas) and bisulfite ion; it prevents microbial growth and the oxidation of wine
+
+   7 - total sulfur dioxide: amount of free and bound forms of S02; in low concentrations, SO2 is mostly undetectable in wine, but at free SO2 concentrations over 50 ppm, SO2 becomes evident in the nose and taste of wine
+
+   8 - density: the density of water is close to that of water depending on the percent alcohol and sugar content
+
+   9 - pH: describes how acidic or basic a wine is on a scale from 0 (very acidic) to 14 (very basic); most wines are between 3-4 on the pH scale
+
+   10 - sulphates: a wine additive which can contribute to sulfur dioxide gas (S02) levels, wich acts as an antimicrobial and antioxidant
+
+   11 - alcohol: the percent alcohol content of the wine
+
+   Output variable (based on sensory data): 
+   12 - quality (score between 0 and 10)
+
+
+```{r echo=FALSE }
+summary(red_wine)
+```
+
+###New variables:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+#New Variable Volatile_Type with categories(less,medium,high) with respect to #quartiles (q1,q2) 
+cond <- red_wine$volatile.acidity < quantile(red_wine$volatile.acidity,0.25)
+#for less volatile red_vines
+red_wine$volatile_type <- ifelse(cond,"less","medium")
+cond <-red_wine$volatile.acidity > quantile(red_wine$volatile.acidity,0.75)
+#for high volatile red_vines
+red_wine$volatile_type <- ifelse(cond,"High",red_wine$volatile_type)
+
+#Citric acid & Freshness
+#creating new variable freshness_rating (1-5) spliting the variable range into 5 quartiles 
+#labeling freshness rate as "1" whose quantile prob is <0.2
+cond <- red_wine$citric.acid < quantile(red_wine$citric.acid,0.2)
+red_wine$freshness_rating <- ifelse(cond,1,2)
+#labeling freshness rate as "2" whose quantile prob is between 0.2 and 0.4 and the same applies for remaining quartiles
+cond <- (red_wine$citric.acid >= quantile(red_wine$citric.acid,0.2)) &
+  (red_wine$citric.acid <quantile(red_wine$citric.acid,0.4))
+red_wine$freshness_rating <- ifelse(cond,2,red_wine$freshness_rating)
+cond <- (red_wine$citric.acid >= quantile(red_wine$citric.acid,0.4)) &
+  (red_wine$citric.acid < quantile(red_wine$citric.acid,0.6))
+red_wine$freshness_rating <- ifelse(cond,3,red_wine$freshness_rating) 
+cond <- (red_wine$citric.acid >= quantile(red_wine$citric.acid,0.6)) &
+  (red_wine$citric.acid < quantile(red_wine$citric.acid,0.8))
+red_wine$freshness_rating <- ifelse(cond,4,red_wine$freshness_rating)
+cond <- (red_wine$citric.acid >= quantile(red_wine$citric.acid,0.8))
+red_wine$freshness_rating <- ifelse(cond,5,red_wine$freshness_rating) 
+
+#creating a new variable quality_type
+cond <- red_wine$quality<5 # naming "Good" for qualitty <
+red_wine$quality_type <- ifelse(cond,"Good","Better")
+cond <- red_wine$quality>4 & red_wine$quality<7
+red_wine$quality_type <- ifelse(cond,"Better",red_wine$quality_type)
+cond <- red_wine$quality>6
+red_wine$quality_type <- ifelse(cond,"Best",red_wine$quality_type)
+#creating a new variable total_acidity
+red_wine<-transform(red_wine,total_acidity=fixed.acidity+volatile.acidity+citric.acid)
+
+names(red_wine)
+```
+
+1.I've created a new variable `freshness_rating` which represents the freshness of the wine on a scale of 1 to 5 ,for this i've used "citric.acid" range in accending and splitted in to five using quantiles. 1 represents the first 20% ie.. not fresh and 5 represents the fifth quantile (80%-100%) which is fresh of all red wines
+
+2.`volatile_type` represents the taste(less = good taste) and `quality_type` represent overall quality
+
+3.`total_acidity` is amount of acidity present in one redwine 
+
+# Univariate Plots Section
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#function for histogram plot
+create_plot <- function(varname, binwidth = 0.1)
+{return(ggplot(aes_string(x = varname), data = red_wine) +
+            geom_histogram(binwidth = binwidth))}
+#function for Bar plot
+
+create_plot1 <- function(varname,width =5 ) 
+{return(ggplot(aes_string(x = varname), data = red_wine) + geom_bar(width = width))}
+#ploting of given variables
+p1<-create_plot('fixed.acidity',0.1 )
+p2<-create_plot('volatile.acidity',0.01)
+p3<-create_plot('citric.acid', 0.05)
+p4<-create_plot("chlorides", 0.01)
+p5<-create_plot('residual.sugar', 0.1)
+p6<-create_plot("free.sulfur.dioxide",1 )
+p7<-create_plot("pH", 0.05)
+p8<-create_plot("sulphates",)
+p9<-create_plot("alcohol",) +scale_x_continuous(breaks=seq(2,15,1))
+p10<-create_plot1("quality",0.5)+scale_x_continuous(breaks=seq(2,12,1))
+
+
+
+
+
+#plotting of new variables
+k1<-create_plot1("volatile_type", 0.1)
+k2<-create_plot1("freshness_rating", 0.1)
+k3<-create_plot1("quality_type", 0.1)
+k4<-create_plot("total_acidity", 0.1)
+
+
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+```
+
+* fixed.acidity and volatile. acidity are a normal distribution with means 8.32 and  0.5278. 
+
+* citric.acid is a positive skew distribution which can be transformed by using `scale_x_log10` 
+
+* chlorides plot is has many outliers .
+
+* since, it's mentioned that wines with high volatile acidity leads to unpleasent,veniger taste .I've createdd a new variable "Volatile_type" to filter less volatile vines from highly and meidium volatile wines considering quantiles as a range ie..the redwines with volatile acidity below Q1 are represented as "less"" volatile ,in between Q1 and Q2 are "medium" volatile and above Q2 are "high" volatile .so, <b>371 </b> red wines have plesent taste and <b>376</b> red wines have unpleasent taste.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+grid.arrange(p5,p6,p7,p8,ncol=2)
+
+
+```
+
+* residual.sugar,free.sulfur.dioxide and sulphates are positive skewed 
+
+* pH is a binominal distribution
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+grid.arrange(p9,p10,ncol=2)
+
+```
+
+
+* alcohol is a positive skewed distribution
+
+* from the quality plot we can clearly observe that it's a bi-modal distribution with 2 modes(5,6)ie.. most of the redwines have the quality rated 5&6 
+
+### New variable plots
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+grid.arrange(k1,k2,k3,k4,ncol=2)
+
+```
+
+* The redwines produced has moreof "medium" volatile_type 
+
+* The freshness_rating is uniform and the "Better" quality_type of the redwines were produced more
+
+* total acidity is a positive is a normal distibution again
+
+
+###Transforming variables which has  outliers 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+p1<-create_plot('citric.acid')+
+  scale_x_log10(limits=c(0.05,1),breaks=seq(0.05,1,0.25))
+p2<-create_plot('residual.sugar',0.1)+
+  scale_x_log10(breaks=seq(1,10,1))
+p3<-create_plot("sulphates",0.01)+scale_x_sqrt()
+p4<-create_plot("chlorides",0.01)+scale_x_log10()+
+  scale_x_log10(limits=c(0.05,0.25),breaks=seq(0.05,0.3,0.1))
+
+grid.arrange(p1,p2,p3,p4,ncol=2)
+
+```
+
+* After transforming using `log_10` and `sqrt` transformations now all the variables have binomial distribution
+
+
+### New data frame 
+
+I've created a new data frame  <b>`red_wine.quality`</b> to analyse some of the factors which are affecting the over all quality rate of red wine
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#creating a new dataframe by grouping the quality
+quality_group<- group_by(red_wine,quality) #crouping by quality
+red_wine.quality_groups <- summarise(quality_group,
+                          density_mean=mean(density), 
+                          ph_mean=median(pH),
+                          alcohol_mean=mean(alcohol),
+                          volatile.acidity_mean=mean(volatile.acidity),
+                          chloride_mean=mean(chlorides),
+                          citric.acid_mean=mean(citric.acid),
+                          count=n())
+names(red_wine.quality_groups)
+
+```
+
+# Bivariate Plots Section
+
+### citric.acid vs volatile_acid
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+#citric.acid vs volatile_acid
+
+cor.test(x=red_wine$volatile.acidity, y=red_wine$citric.acid, method = 'pearson')
+
+ggplot(aes(x=volatile.acidity,y=citric.acid),
+  data=red_wine)+
+  geom_point()+
+  scale_x_continuous(breaks = seq(0,1.6,0.2))
+
+```
+
+* from the citric acid vs volatile.acidity we can observe that the bulk of the data lies inside second quartile ie.. most of the data is below mean .As we know that increase in volatile acidic concentration leads to unpleasent taste and decrease in citric acid concentration leads to lack of freshness. many red wines have '0' citric acid concentration which means they are not fresh and 3 of the red wines from the given data are highly volatile(> 1.1) and not fresh.There are 2 redwines which are fresh and pleasant to taste ie..less volitile and have more citric acid concentration .one red_wine which has volatile.acidity 0.52 is the freshest of all the redwines (citric.acid =1.00)
+
+### quality vs mean of factors 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+#ploting the mean of the factors that affects the quality rate
+p1<-ggplot(aes(x = quality, y = density_mean), data = red_wine.quality_groups)+geom_line()
+p2<-ggplot(aes(x = quality, y = ph_mean), data = red_wine.quality_groups)+geom_line()
+p3<-ggplot(aes(x = quality, y = alcohol_mean), data = red_wine.quality_groups)+geom_line()
+p4<-ggplot(aes(x = quality, y = volatile.acidity_mean),data = red_wine.quality_groups)+geom_line()
+p5<-ggplot(aes(x = quality, y = chloride_mean), data = red_wine.quality_groups)+geom_line()
+p6<-ggplot(aes(x = quality, y = citric.acid_mean),data = red_wine.quality_groups)+geom_line()
+
+grid.arrange(p1,p2,p3,p4,p5,p6,ncol=2)
+
+```
+
+* It's observed that the red wine which is highly rated in terms of quality also fresh and pleasent to taste has less density ,low chlorine concentration,low pH value and high alcohol percentage compared to other redwines, viceversa applys for low rated reswines.
+
+
+####free.sulfur.dioxide vs total.sulfur.dioxide removing top 1% 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#correlation
+cor.test(x=red_wine$total.sulfur.dioxide, y=red_wine$free.sulfur.dioxide, method = 'pearson')
+
+#free.sulfur.dioxide vs total.sulfur.dioxide removing top 1%
+ggplot(aes(x=total.sulfur.dioxide,y=free.sulfur.dioxide),data = red_wine)+
+  geom_jitter(alpha=1/5)+
+  scale_x_continuous(lim=c(0,quantile(red_wine$total.sulfur.dioxide,0.99)))+
+  scale_y_continuous(lim=c(0,quantile(red_wine$free.sulfur.dioxide,0.99)))+
+    geom_smooth(method = 'auto',color='red')
+```
+
+
+* free.sulfur.dioxide vs total.sulfur.dioxide The plot shows the relationship between total sulfur and free sulfur ,there are many outliers while considering bulk of the data which line in first quartile and second quartile
+
+# Multivariate Plots Section
+
+### Density vs pH (coloured by quality_type)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#correlation
+cor.test(x=red_wine$density, y=red_wine$pH, method = 'pearson')
+#density vs pH
+ggplot(aes(x=density,y=pH),data=red_wine)+geom_point(aes(color=quality_type),alpha=1/2)
+
+```
+
+* I've created pH vs density plot colored by quality_type to distiguish pH nd Density of Better quality wines from best and good quality wines.The correlation is negative
+
+###sulphate vs. Residual sugar coloured by freshnes rating and facet by quality type
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#correlation
+cor.test(x=red_wine$alcohol, y=red_wine$sulphates, method = 'pearson')
+
+ggplot(aes(x = alcohol, 
+           y = sulphates  , color = factor(quality)), 
+       data = red_wine) +
+      geom_point(alpha = 0.8, size = 1) +
+      geom_smooth(method = "lm", se = FALSE,size=1)  +
+  scale_color_brewer(type='seq',
+                   guide=guide_legend(title='Quality'))
+```
+
+* from the sulphates vs.alcohol plot which was coloured by quality we can observe that best quality redwines tend to have high concentrations of sulphates and   alcohol% ?v > 10 
+
+###total_acidity vs alcohol coloured by volatile_type
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#correlation
+cor.test(x=red_wine$alcohol, y=red_wine$total_acidity, method = 'pearson')
+
+
+ggplot(aes(y=total_acidity,x=alcohol),data = red_wine)+
+  geom_jitter(aes(color=volatile_type),alpha=1/2)+
+  scale_color_brewer(type = 'qual',palette = 2)
+
+```
+
+* From the total acidity vs. alcohol plot it is  observed that the  one of  the redwines which tastes good has high alcohol content and acidity .
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(aes(x=volatile.acidity,y=citric.acid),data=subset(red_wine,quality != 8))+
+  geom_point(aes(color=as.factor(freshness_rating)),alpha=1/2)+
+  facet_grid(~quality_type)+
+  scale_color_brewer(type='div',palette="Reds")+
+  ggtitle("Taste vs. Freshness coloured by Freshness_rating")+
+  xlab('conc. of valatile acid (g / dm^3)')+
+  ylab('conc. of citric acid (g / dm^3)')
+
+```
+
+### Description One
+
+As mentioned in above analysis Red wines which are fresh and best quality have high citric acid concentration and less volatile acid concentration
+
+### Plot Two
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aes(y=alcohol, x=total_acidity,color=quality_type),data=red_wine)+
+  geom_point(alpha=0.5)+
+  facet_wrap(~volatile_type)+
+  ggtitle("Alcohol vs. total Acidity facet by volatile_type (colored by quality type)")+
+  xlab('total acidity conc.(g / dm^3) ')+
+  ylab('Alcohol % /V')+
+  scale_x_continuous(breaks=seq(4,16,2))+
+  scale_y_continuous(limits=c(10,14),breaks=seq(10,14,1))
+
+```
+
+### Description Two
+
+from the above plot we can observe that the Best quality redwines which are less volatile ie. good in taste have Alcohol% > 10.5 and total acidity > 6 g/dm^3.
+
+> note : i've used this colors to identify the Best Quality redwines from better and Good
+
+### Plot Three
+
+```{r echo=FALSE, message =FALSE, warning =FALSE}
+ggplot(aes(factor(quality), 
+            alcohol), 
+        data = red_wine) +
+  geom_jitter( alpha = .3)  +
+  geom_boxplot( alpha = .5,color = 'blue')+
+  stat_summary(fun.y = "mean", 
+               geom = "point", 
+               color = "red", 
+               shape = 8, 
+               size = 4)
+
+
+```
+
+### Description Three
+
+we can observe that as alcohol % increaseed the overall quality pf the redwine increases 
+ 
+ 
+ 
+> Note : <b>Plot one</b>  has been depicted breifly in <b>Bivariate plot section</b> , <b>Plot two</b> has been plotted in <b>multi vatiate plot section </b> and a breif idea abut <b>Plot 3</b>  was provided in <b>Bivariate plot section</b> (quality vs mean of factors) alcohol plot was choosen from those plots
+
+
+------
+
+# Reflection
+
+From the given dataset EDA I've been able to analyse the data by using quality,taste and fresshness of the redwine  as essential elements .Since, this is a chemisty based dataset i found some difficulty while analysing the chemical properties of the  given variables affecting the over quality of redwine which are not mentioned in dataset.
+
+For the most part the way i used to take after was firmly determined by disperse plot network. Again the conclusion emphatically depends on the quality and concentration evaluations .
+ 
+For future work of Discovering an ideal wine by experimentation technique in labs my making the classic red wine is to assemble a model to rate the wines from this informational collection and to discover an arrangement of components to make top quality wine  
+
+
+
+> Note : Total there are total <b>32</b> visualised plots in my analysis 
+
+
+
+
